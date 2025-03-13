@@ -1,0 +1,8 @@
+{
+  "name": "chord",
+  "version": "0.10",
+  "dependencies": [
+    "grpc",
+    "tl-expected"
+  ]
+}

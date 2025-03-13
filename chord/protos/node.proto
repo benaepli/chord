@@ -1,0 +1,15 @@
+service NodeService {
+  // This procedure is similar to find_predecessor in the Chord paper, but it directly returns the successor on the final step.
+  rpc FindSuccessor(FindSuccessorRequest) returns (FindSuccessorReply);
+  
+}
+
+message FindSuccessorRequest {
+  required bytes identifier = 1;
+}
+
+message FindSuccessorReply {
+  required bool found = 1;
+  required bytes identifier = 2; // Either responds with the successor or a preceding finger table entry
+}
+
