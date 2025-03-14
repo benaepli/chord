@@ -22,11 +22,6 @@ namespace chord::core
         KeyId end; // Exclusive
     };
 
-    struct SocketAddr
-    {
-        std::string ip;
-        uint16_t port;
-    };
 
     enum class Error
     {
@@ -35,7 +30,7 @@ namespace chord::core
     struct Node
     {
         NodeId id;
-        SocketAddr addr;
+        std::string address;
 
         bool operator==(const Node& other) const
         {

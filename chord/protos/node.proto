@@ -1,7 +1,19 @@
 service NodeService {
   // This procedure is similar to find_predecessor in the Chord paper, but it directly returns the successor on the final step.
   rpc FindSuccessor(FindSuccessorRequest) returns (FindSuccessorReply);
-  
+  rpc GetPredecessor(GetPredecessorRequest) returns (GetPredecessorReply);
+  rpc Notify(NotifyRequest) returns (NotifyReply);
+  rpc GetSuccessorList(GetSuccessorListRequest) returns (GetSuccessorListReply);
+  rpc UpdateFingerTable(UpdateFingerTableRequest) returns (UpdateFingerTableReply);
+  // Notifies the successor that its predecessor has left the network
+  rpc PredecessorLeave(PredecessorLeaveRequest) returns (PredecessorLeaveReply);
+
+  /*
+    Note: this isn't strictly necessary because of stabilization, but perhaps we implement it later for efficiency.
+
+    // Notifies the predecessor that its successor has left the network
+    rpc SuccessorLeave(SuccessorLeaveRequest) returns (SuccessorLeaveReply);
+   */
 }
 
 message FindSuccessorRequest {
@@ -13,3 +25,45 @@ message FindSuccessorReply {
   required bytes identifier = 2; // Either responds with the successor or a preceding finger table entry
 }
 
+message GetPredecessorRequest {
+}
+
+message GetPredecessorReply {
+  required bytes identifier = 1;
+}
+
+message NotifyRequest {
+  required bytes identifier = 1;
+}
+
+message NotifyReply {
+}
+
+message GetSuccessorListRequest {
+}
+
+message GetSuccessorListReply {
+  repeated bytes identifiers = 1;
+}
+
+message UpdateFingerTableRequest {
+  required bytes identifier = 1;
+  required int32 index = 2;
+}
+
+message UpdateFingerTableReply {
+}
+
+message PredecessorLeaveRequest {
+  required bytes identifier = 1;
+  optional bytes newPredecessor = 2;
+}
+
+message PredecessorLeaveReply {
+}
+
+//message  SuccessorLeaveRequest {
+//}
+//
+//message SuccessorLeaveReply {
+//}
