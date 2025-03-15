@@ -52,5 +52,7 @@ namespace chord::core
 
         void setPredecessorLeaveCallback(PredecessorLeaveCallback callback);
         void setSuccessorListChangeCallback(SuccessorListChangeCallback callback);
+
+        [[nodiscard]] ChordApplicationNetwork& getApplicationNetwork();
     };
 } // namespace chord::core

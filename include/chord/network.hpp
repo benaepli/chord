@@ -27,8 +27,11 @@ namespace chord::core
 
     enum class Error: uint8_t
     {
-        RPCFailed,
+        Timeout,
         NodeNotFound,
+        ServerAlreadyRunning,
+        ServerStartFailed,
+        Unexpected,
     };
 
     struct Node
@@ -42,6 +45,12 @@ namespace chord::core
         }
     };
 
+    struct FindSuccessorReply
+    {
+        bool found = false;
+        Node node;
+    };
+
     class ChordApplicationNetwork
     {
     public:
@@ -49,6 +58,7 @@ namespace chord::core
 
         virtual tl::expected<std::vector<Node>, Error> getSuccessorList(const std::string& remoteAddress) = 0;
     };
+
 
     class ChordNetwork : public ChordApplicationNetwork
     {
@@ -65,17 +75,19 @@ namespace chord::core
         virtual tl::expected<void, Error> predecessorLeave(const std::string& remoteAddress, const Node& predecessor) =
         0;
 
-        using FindSuccessorCallback = std::function<Node(KeyId)>;
+        using GetSuccessorListCallback = std::function<std::vector<Node>()>;
+
+        using FindSuccessorCallback = std::function<FindSuccessorReply(KeyId)>;
         using GetPredecessorCallback = std::function<std::optional<Node>()>;
         using NotifyCallback = std::function<void(const Node&)>;
-        using GetSuccessorListCallback = std::function<std::vector<Node>()>;
         using UpdateFingerTableCallback = std::function<void(int, const Node&)>;
         using PredecessorLeaveCallback = std::function<void(const Node&)>;
+
+        virtual void setGetSuccessorListCallback(GetSuccessorListCallback callback) = 0;
 
         virtual void setFindSuccessorCallback(FindSuccessorCallback callback) = 0;
         virtual void setGetPredecessorCallback(GetPredecessorCallback callback) = 0;
         virtual void setNotifyCallback(NotifyCallback callback) = 0;
-        virtual void setGetSuccessorListCallback(GetSuccessorListCallback callback) = 0;
         virtual void setUpdateFingerTableCallback(UpdateFingerTableCallback callback) = 0;
         virtual void setPredecessorLeaveCallback(PredecessorLeaveCallback callback) = 0;
     };

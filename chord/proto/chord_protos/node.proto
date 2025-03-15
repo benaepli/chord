@@ -20,24 +20,29 @@ service NodeService {
    */
 }
 
+message NodeInfo {
+  bytes id = 1;
+  string address = 2;
+}
+
 message FindSuccessorRequest {
-  bytes identifier = 1;
+  bytes keyId = 1;
 }
 
 message FindSuccessorReply {
   bool found = 1;
-  bytes identifier = 2; // Either responds with the successor or a preceding finger table entry
+  NodeInfo node = 2; // Either responds with the successor or a preceding finger table entry
 }
 
 message GetPredecessorRequest {
 }
 
 message GetPredecessorReply {
-  bytes identifier = 1;
+  optional NodeInfo node = 1;
 }
 
 message NotifyRequest {
-  bytes identifier = 1;
+  NodeInfo node = 1;
 }
 
 message NotifyReply {
@@ -47,11 +52,11 @@ message GetSuccessorListRequest {
 }
 
 message GetSuccessorListReply {
-  repeated bytes identifiers = 1;
+  repeated NodeInfo nodes = 1;
 }
 
 message UpdateFingerTableRequest {
-  bytes identifier = 1;
+  NodeInfo node = 1;
   int32 index = 2;
 }
 
@@ -59,7 +64,7 @@ message UpdateFingerTableReply {
 }
 
 message PredecessorLeaveRequest {
-  bytes identifier = 1;
+  NodeInfo node = 1;
   optional bytes newPredecessor = 2;
 }
 
