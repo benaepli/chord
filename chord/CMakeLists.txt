@@ -1,14 +1,15 @@
+find_package(tl-expected CONFIG REQUIRED)
+
+add_subdirectory(proto)
+
 add_library(chord
         src/chord.cpp
+        src/network.cpp
         src/node.cpp
 )
 
-find_package(tl-expected CONFIG REQUIRED)
 target_link_libraries(chord PUBLIC tl::expected)
-
-find_package(gRPC CONFIG REQUIRED)
-target_link_libraries(chord PRIVATE gRPC::gpr gRPC::grpc gRPC::grpc++ gRPC::grpc++_alts)
-
+target_link_libraries(chord PRIVATE chord_protos)
 
 # Set up include directories
 target_include_directories(chord

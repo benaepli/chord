@@ -1,3 +1,7 @@
+syntax = "proto3";
+
+package chord_protos;
+
 service NodeService {
   // This procedure is similar to find_predecessor in the Chord paper, but it directly returns the successor on the final step.
   rpc FindSuccessor(FindSuccessorRequest) returns (FindSuccessorReply);
@@ -17,23 +21,23 @@ service NodeService {
 }
 
 message FindSuccessorRequest {
-  required bytes identifier = 1;
+  bytes identifier = 1;
 }
 
 message FindSuccessorReply {
-  required bool found = 1;
-  required bytes identifier = 2; // Either responds with the successor or a preceding finger table entry
+  bool found = 1;
+  bytes identifier = 2; // Either responds with the successor or a preceding finger table entry
 }
 
 message GetPredecessorRequest {
 }
 
 message GetPredecessorReply {
-  required bytes identifier = 1;
+  bytes identifier = 1;
 }
 
 message NotifyRequest {
-  required bytes identifier = 1;
+  bytes identifier = 1;
 }
 
 message NotifyReply {
@@ -47,15 +51,15 @@ message GetSuccessorListReply {
 }
 
 message UpdateFingerTableRequest {
-  required bytes identifier = 1;
-  required int32 index = 2;
+  bytes identifier = 1;
+  int32 index = 2;
 }
 
 message UpdateFingerTableReply {
 }
 
 message PredecessorLeaveRequest {
-  required bytes identifier = 1;
+  bytes identifier = 1;
   optional bytes newPredecessor = 2;
 }
 
