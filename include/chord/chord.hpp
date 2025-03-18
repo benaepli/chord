@@ -22,8 +22,8 @@ namespace chord::core
         uint64_t successorListSize = 1; ///< Size of the successor list
         uint64_t stabilizationInterval = 200; ///< Interval for stabilization in milliseconds
         uint64_t fingerFixingInterval = 200; ///< Interval for fixing fingers in milliseconds
-        uint64_t retryLimit = 3; ///< Number of retries for RPC calls
-        uint64_t initialRetryInterval = 100; ///< Initial interval for retries in milliseconds
+        // uint64_t retryLimit = 3; ///< Number of retries for RPC calls
+        // uint64_t initialRetryInterval = 100; ///< Initial interval for retries in milliseconds
     };
 
     /**

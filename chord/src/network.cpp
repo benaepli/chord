@@ -26,6 +26,11 @@ namespace chord::core
         return nodeId;
     }
 
+    inline std::string fromId(const KeyId& id)
+    {
+        return std::string(id.begin(), id.end());
+    }
+
     inline tl::expected<Node, Error> toNode(const chord_protos::NodeInfo& nodeInfo)
     {
         Node node{};
@@ -39,6 +44,24 @@ namespace chord::core
         node.address = nodeInfo.address();
         return node;
     }
+
+    inline Error fromStatus(const grpc::Status& status)
+    {
+        switch (status.error_code())
+        {
+            case grpc::StatusCode::DEADLINE_EXCEEDED:
+            case grpc::StatusCode::ABORTED:
+            case grpc::StatusCode::UNAVAILABLE:
+                return Error::Timeout;
+            case grpc::StatusCode::INVALID_ARGUMENT:
+                return Error::InvalidArgument;
+            default:
+                return Error::Unexpected;
+        }
+    }
+
+#define RETURN_IF_STATUS_ERROR(status) \
+    if (!status.ok()) { return tl::make_unexpected(fromStatus(status)); }
 
     inline void fromNode(const Node& node, chord_protos::NodeInfo* nodeInfo)
     {
@@ -211,9 +234,10 @@ namespace chord::core
         tl::expected<std::vector<Node>, Error>
         getSuccessorList(const std::string& remoteAddress) override;
 
-        tl::expected<Node, Error>
+        tl::expected<FindSuccessorReply, Error>
         findSuccessor(const std::string& remoteAddress, KeyId id) override;
-        tl::expected<Node, Error> getPredecessor(const std::string& remoteAddress) override;
+        tl::expected<std::optional<Node>, Error>
+        getPredecessor(const std::string& remoteAddress) override;
         tl::expected<void, Error>
         notify(const std::string& remoteAddress, const Node& node) override;
         tl::expected<void, Error>
@@ -472,8 +496,130 @@ namespace chord::core
         grpc::ClientContext context;
 
         auto status = stub->GetSuccessorList(&context, request, &reply);
+        RETURN_IF_STATUS_ERROR(status)
+
+        std::vector<Node> nodes;
+        for (const auto& nodeInfo : reply.nodes())
+        {
+            auto node = toNode(nodeInfo);
+            if (!node)
+            {
+                return tl::make_unexpected(node.error());
+            }
+
+            nodes.push_back(*node);
+        }
+        return nodes;
     }
 
+    tl::expected<FindSuccessorReply, Error> GrpcChordNetwork::findSuccessor(
+        const std::string& remoteAddress,
+        KeyId id)
+    {
+        auto channel = createChannel(remoteAddress);
+        auto stub = chord_protos::NodeService::NewStub(channel);
+
+        chord_protos::FindSuccessorRequest request;
+        request.set_keyid(fromId(id));
+
+        chord_protos::FindSuccessorReply reply;
+        grpc::ClientContext context;
+
+        auto status = stub->FindSuccessor(&context, request, &reply);
+        RETURN_IF_STATUS_ERROR(status);
+
+        auto node = toNode(reply.node());
+        if (!node)
+        {
+            return tl::make_unexpected(node.error());
+        }
+
+        return FindSuccessorReply{reply.found(), *node};
+    }
+
+    tl::expected<std::optional<Node>, Error> GrpcChordNetwork::getPredecessor(
+        const std::string& remoteAddress)
+    {
+        auto channel = createChannel(remoteAddress);
+        auto stub = chord_protos::NodeService::NewStub(channel);
+
+        chord_protos::GetPredecessorRequest request;
+        chord_protos::GetPredecessorReply reply;
+        grpc::ClientContext context;
+
+        auto status = stub->GetPredecessor(&context, request, &reply);
+        RETURN_IF_STATUS_ERROR(status);
+
+        if (reply.has_node())
+        {
+            auto node = toNode(reply.node());
+            if (!node)
+            {
+                return tl::make_unexpected(node.error());
+            }
+            return std::optional<Node>{*node};
+        }
+
+        return std::nullopt;
+    }
+
+    tl::expected<void, Error> GrpcChordNetwork::notify(const std::string& remoteAddress,
+                                                       const Node& node)
+    {
+        auto channel = createChannel(remoteAddress);
+        auto stub = chord_protos::NodeService::NewStub(channel);
+
+        chord_protos::NotifyRequest request;
+        chord_protos::NotifyReply reply;
+        grpc::ClientContext context;
+
+        fromNode(node, request.mutable_node());
+
+        auto status = stub->Notify(&context, request, &reply);
+        RETURN_IF_STATUS_ERROR(status);
+
+        return {};
+    }
+
+    tl::expected<void, Error> GrpcChordNetwork::updateFingerTable(
+        const std::string& remoteAddress,
+        int index,
+        const Node& node)
+    {
+        auto channel = createChannel(remoteAddress);
+        auto stub = chord_protos::NodeService::NewStub(channel);
+
+        chord_protos::UpdateFingerTableRequest request;
+        chord_protos::UpdateFingerTableReply reply;
+        grpc::ClientContext context;
+
+        request.set_index(index);
+        fromNode(node, request.mutable_node());
+
+        auto status = stub->UpdateFingerTable(&context, request, &reply);
+        RETURN_IF_STATUS_ERROR(status);
+
+        return {};
+    }
+
+    tl::expected<void, Error> GrpcChordNetwork::predecessorLeave(
+        const std::string& remoteAddress,
+        const Node& predecessor)
+    {
+        auto channel = createChannel(remoteAddress);
+        auto stub = chord_protos::NodeService::NewStub(channel);
+
+        chord_protos::PredecessorLeaveRequest request;
+        chord_protos::PredecessorLeaveReply reply;
+        grpc::ClientContext context;
+
+        fromNode(predecessor, request.mutable_node());
+
+        auto status = stub->PredecessorLeave(&context, request, &reply);
+        RETURN_IF_STATUS_ERROR(status);
+
+        return {};
+    }
 
     std::shared_ptr<ChordNetwork> createFullNetwork()
     {

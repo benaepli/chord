@@ -32,6 +32,7 @@ namespace chord::core
         ServerAlreadyRunning,
         ServerStartFailed,
         Unexpected,
+        InvalidArgument,
     };
 
     struct Node
@@ -51,6 +52,10 @@ namespace chord::core
         Node node;
     };
 
+    struct RequestConfig
+    {
+    };
+
     class ChordApplicationNetwork
     {
     public:
@@ -67,8 +72,8 @@ namespace chord::core
         virtual tl::expected<void, Error> startServer(const std::string& address) = 0;
         virtual void stopServer() = 0;
 
-        virtual tl::expected<Node, Error> findSuccessor(const std::string& remoteAddress, KeyId id) = 0;
-        virtual tl::expected<Node, Error> getPredecessor(const std::string& remoteAddress) = 0;
+        virtual tl::expected<FindSuccessorReply, Error> findSuccessor(const std::string& remoteAddress, KeyId id) = 0;
+        virtual tl::expected<std::optional<Node>, Error> getPredecessor(const std::string& remoteAddress) = 0;
         virtual tl::expected<void, Error> notify(const std::string& remoteAddress, const Node& node) = 0;
         virtual tl::expected<void, Error> updateFingerTable(const std::string& remoteAddress, int index,
                                                             const Node& node) = 0;
