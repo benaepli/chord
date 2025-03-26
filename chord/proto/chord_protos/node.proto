@@ -3,11 +3,12 @@ syntax = "proto3";
 package chord_protos;
 
 service NodeService {
+  rpc GetSuccessorList(GetSuccessorListRequest) returns (GetSuccessorListReply);
+
   // This procedure is similar to find_predecessor in the Chord paper, but it directly returns the successor on the final step.
   rpc FindSuccessor(FindSuccessorRequest) returns (FindSuccessorReply);
   rpc GetPredecessor(GetPredecessorRequest) returns (GetPredecessorReply);
   rpc Notify(NotifyRequest) returns (NotifyReply);
-  rpc GetSuccessorList(GetSuccessorListRequest) returns (GetSuccessorListReply);
   rpc UpdateFingerTable(UpdateFingerTableRequest) returns (UpdateFingerTableReply);
   // Notifies the successor that its predecessor has left the network
   rpc PredecessorLeave(PredecessorLeaveRequest) returns (PredecessorLeaveReply);
@@ -23,6 +24,13 @@ service NodeService {
 message NodeInfo {
   bytes id = 1;
   string address = 2;
+}
+
+message GetSuccessorListRequest {
+}
+
+message GetSuccessorListReply {
+  repeated NodeInfo nodes = 1;
 }
 
 message FindSuccessorRequest {
@@ -46,13 +54,6 @@ message NotifyRequest {
 }
 
 message NotifyReply {
-}
-
-message GetSuccessorListRequest {
-}
-
-message GetSuccessorListReply {
-  repeated NodeInfo nodes = 1;
 }
 
 message UpdateFingerTableRequest {

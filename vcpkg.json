@@ -3,6 +3,8 @@
   "version": "0.10",
   "dependencies": [
     "grpc",
+    "openssl",
+    "spdlog",
     "tl-expected"
   ]
 }
