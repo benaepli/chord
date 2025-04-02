@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstring>
 #include <exception>
 #include <memory>
 #include <string>
@@ -21,7 +22,7 @@ namespace chord::core {
         }
 
         KeyId nodeId{};
-        std::copy(id.begin(), id.end(), nodeId.begin());
+        std::ranges::copy(id, nodeId.begin());
         return nodeId;
     }
 
@@ -276,7 +277,8 @@ namespace chord::core {
     };
 
     grpc::Status GrpcChordNetwork::ChordServiceImpl::GetSuccessorList(grpc::ServerContext *context,
-                                                                      const chord_protos::GetSuccessorListRequest *request,
+                                                                      const chord_protos::GetSuccessorListRequest *
+                                                                      request,
                                                                       chord_protos::GetSuccessorListReply *response) {
         if (!getSuccessorListCallback_) {
             return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
@@ -290,8 +292,7 @@ namespace chord::core {
             }
 
             return grpc::Status::OK;
-        }
-        catch (const std::exception &e) {
+        } catch (const std::exception &e) {
             return {grpc::StatusCode::INTERNAL, e.what()};
         }
     }
@@ -314,8 +315,7 @@ namespace chord::core {
             fromNode(node.node, response->mutable_node());
 
             return grpc::Status::OK;
-        }
-        catch (const std::exception &e) {
+        } catch (const std::exception &e) {
             return {grpc::StatusCode::INTERNAL, e.what()};
         }
     }
@@ -333,8 +333,7 @@ namespace chord::core {
             }
 
             return grpc::Status::OK;
-        }
-        catch (const std::exception &e) {
+        } catch (const std::exception &e) {
             return {grpc::StatusCode::INTERNAL, e.what()};
         }
     }
@@ -356,14 +355,14 @@ namespace chord::core {
             notifyCallback_(*node);
 
             return grpc::Status::OK;
-        }
-        catch (const std::exception &e) {
+        } catch (const std::exception &e) {
             return {grpc::StatusCode::INTERNAL, e.what()};
         }
     }
 
     grpc::Status GrpcChordNetwork::ChordServiceImpl::UpdateFingerTable(grpc::ServerContext *context,
-                                                                       const chord_protos::UpdateFingerTableRequest *request,
+                                                                       const chord_protos::UpdateFingerTableRequest *
+                                                                       request,
                                                                        chord_protos::UpdateFingerTableReply *response) {
         if (!updateFingerTableCallback_) {
             return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
@@ -378,14 +377,14 @@ namespace chord::core {
             updateFingerTableCallback_(request->index(), *node);
 
             return grpc::Status::OK;
-        }
-        catch (const std::exception &e) {
+        } catch (const std::exception &e) {
             return {grpc::StatusCode::INTERNAL, e.what()};
         }
     }
 
     grpc::Status GrpcChordNetwork::ChordServiceImpl::PredecessorLeave(grpc::ServerContext *context,
-                                                                      const chord_protos::PredecessorLeaveRequest *request,
+                                                                      const chord_protos::PredecessorLeaveRequest *
+                                                                      request,
                                                                       chord_protos::PredecessorLeaveReply *response) {
         if (!predecessorLeaveCallback_) {
             return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
@@ -400,8 +399,7 @@ namespace chord::core {
             predecessorLeaveCallback_(*node);
 
             return grpc::Status::OK;
-        }
-        catch (const std::exception &e) {
+        } catch (const std::exception &e) {
             return {grpc::StatusCode::INTERNAL, e.what()};
         }
     }
@@ -436,7 +434,7 @@ namespace chord::core {
     }
 
     tl::expected<std::vector<Node>, Error> GrpcChordNetwork::getSuccessorList(
-            const std::string &remoteAddress, RequestConfig config) {
+        const std::string &remoteAddress, RequestConfig config) {
         auto channel = createChannel(remoteAddress);
         auto stub = chord_protos::NodeService::NewStub(channel);
 
@@ -461,8 +459,8 @@ namespace chord::core {
     }
 
     tl::expected<FindSuccessorReply, Error> GrpcChordNetwork::findSuccessor(
-            const std::string &remoteAddress,
-            KeyId id, RequestConfig config) {
+        const std::string &remoteAddress,
+        KeyId id, RequestConfig config) {
         auto channel = createChannel(remoteAddress);
         auto stub = chord_protos::NodeService::NewStub(channel);
 
@@ -485,7 +483,7 @@ namespace chord::core {
     }
 
     tl::expected<std::optional<Node>, Error> GrpcChordNetwork::getPredecessor(
-            const std::string &remoteAddress, RequestConfig config) {
+        const std::string &remoteAddress, RequestConfig config) {
         auto channel = createChannel(remoteAddress);
         auto stub = chord_protos::NodeService::NewStub(channel);
 
@@ -527,9 +525,9 @@ namespace chord::core {
     }
 
     tl::expected<void, Error> GrpcChordNetwork::updateFingerTable(
-            const std::string &remoteAddress,
-            int index,
-            const Node &node, RequestConfig config) {
+        const std::string &remoteAddress,
+        int index,
+        const Node &node, RequestConfig config) {
         auto channel = createChannel(remoteAddress);
         auto stub = chord_protos::NodeService::NewStub(channel);
 
@@ -548,8 +546,8 @@ namespace chord::core {
     }
 
     tl::expected<void, Error> GrpcChordNetwork::predecessorLeave(
-            const std::string &remoteAddress,
-            const Node &predecessor, RequestConfig config) {
+        const std::string &remoteAddress,
+        const Node &predecessor, RequestConfig config) {
         auto channel = createChannel(remoteAddress);
         auto stub = chord_protos::NodeService::NewStub(channel);
 
@@ -572,6 +570,35 @@ namespace chord::core {
 
     std::shared_ptr<ChordApplicationNetwork> createApplicationNetwork() {
         return createFullNetwork();
+    }
+
+    std::strong_ordering compareKeyId(KeyId first, KeyId second) {
+        int cmp = std::memcmp(first.data(), second.data(), KEY_BYTES);
+
+        if (cmp < 0) {
+            return std::strong_ordering::less;
+        }
+
+        if (cmp > 0) {
+            return std::strong_ordering::less;
+        }
+
+        return std::strong_ordering::equal;
+    }
+
+    bool keyIdBetween(KeyId start, KeyId end, KeyId betweenKey) {
+        auto ordering = compareKeyId(start, end);
+        bool greaterThanStart = compareKeyId(start, betweenKey) == std::strong_ordering::less;
+
+        bool lessOrEqualToEnd = compareKeyId(betweenKey, end) == std::strong_ordering::equal
+                                || compareKeyId(betweenKey, end) == std::strong_ordering::less;
+
+        if (ordering == std::strong_ordering::greater) {
+            // Wrap around
+            return greaterThanStart || lessOrEqualToEnd;
+        }
+
+        return greaterThanStart && lessOrEqualToEnd;
     }
 
     KeyId generateKeyId(const std::string &address) {

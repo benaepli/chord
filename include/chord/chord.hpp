@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -12,6 +13,7 @@
 #include <tl/expected.hpp>
 #include <mutex>
 #include <set>
+#include <thread>
 
 #include "network.hpp"
 
@@ -32,20 +34,25 @@ namespace chord::core {
     */
     class NodeServer {
     public:
-        static tl::expected<NodeServer, Error> create(
-                const std::string &address,
-                Config config,
-                std::shared_ptr<ChordNetwork> network = createFullNetwork());
+        static tl::expected<std::unique_ptr<NodeServer>, Error> create(
+            const std::string &address,
+            Config config,
+            std::shared_ptr<ChordNetwork> network = createFullNetwork());
 
         ~NodeServer();
 
+        NodeServer(NodeServer const &) = delete;
+
+        NodeServer(NodeServer &&) = delete;
+
+
         [[nodiscard]] KeyId getId() const {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard lock(mtx_);
             return id_;
         }
 
         [[nodiscard]] std::string getAddress() const {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard lock(mtx_);
             return address_;
         }
 
@@ -56,7 +63,7 @@ namespace chord::core {
         tl::expected<Node, Error> lookup(KeyId id);
 
         [[nodiscard]] std::vector<Node> getSuccessorList() const {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard lock(mtx_);
             return successorList_;
         }
 
@@ -64,22 +71,22 @@ namespace chord::core {
         using SuccessorListChangeCallback = std::function<void(const std::vector<Node> &)>;
 
         void setPredecessorLeaveCallback(PredecessorLeaveCallback callback) {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard lock(mtx_);
             predecessorLeaveCallback_ = std::move(callback);
         }
 
         void setSuccessorListChangeCallback(SuccessorListChangeCallback callback) {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard lock(mtx_);
             successorListChangeCallback_ = std::move(callback);
         }
 
         [[nodiscard]] std::optional<Node> getPredecessor() const {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard lock(mtx_);
             return predecessor_;
         }
 
         [[nodiscard]] std::shared_ptr<ChordNetwork> getNetwork() const {
-            std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard lock(mtx_);
             return network_;
         }
 
@@ -90,6 +97,31 @@ namespace chord::core {
     private:
         explicit NodeServer(std::string address, Config config, std::shared_ptr<ChordNetwork> network);
 
+        /**
+         * NOTE: not thread safe
+         * @param keyId id of the key for which we want to find the closest preceding finger
+         * @param ignoreId specify this if we want to find a finger with an id not equal to ignoreId
+         */
+        [[nodiscard]] Node closestPrecedingFinger(KeyId keyId, std::optional<KeyId> ignoreId = std::nullopt) const;
+
+        /**
+         * NOTE: not thread safe.
+         * @return id and address in a Node struct (for use in RPCs)
+         */
+        [[nodiscard]] Node thisNode() const {
+            return Node{.id = id_, .address = address_};
+        }
+
+        FindSuccessorReply findSuccessor(KeyId keyId) const;
+
+        void stabilizationLoop(std::stop_token stopToken);
+
+
+        /**
+         * Shuts down threads and necessary resources.
+         */
+        void handleCoreShutdown();
+
 
         mutable std::mutex mtx_;
 
@@ -98,9 +130,13 @@ namespace chord::core {
         std::shared_ptr<ChordNetwork> network_;
         KeyId id_;
         std::vector<Node> successorList_{};
+        std::vector<Node> fingerTable_{};
         std::optional<Node> predecessor_{};
         PredecessorLeaveCallback predecessorLeaveCallback_;
         SuccessorListChangeCallback successorListChangeCallback_;
 
+        std::condition_variable cv_;
+        bool shouldTerminate_ = false;
+        std::optional<std::jthread> stabilizationThread_;
     };
 } // namespace chord::core

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <compare>
 #include <array>
 #include <cstdint>
 #include <tl/expected.hpp>
@@ -16,6 +17,20 @@ namespace chord::core {
 
     using KeyId = std::array<uint8_t, KEY_BYTES>;
 
+    std::strong_ordering compareKeyId(KeyId first, KeyId second);
+
+
+    /**
+     *
+     * @param start The start key
+     * @param end The end key
+     * @param betweenKey The query key - i.e. is betweenKey in the range (start, end]
+     * @return
+     */
+    bool keyIdBetween(KeyId start, KeyId end, KeyId betweenKey);
+
+    bool keyIdBefore(KeyId point, KeyId beforeKey);
+
     // Uses SHA-1 hash function to generate a KeyId from a string
     KeyId generateKeyId(const std::string &address);
 
@@ -27,6 +42,7 @@ namespace chord::core {
         ServerStartFailed,
         Unexpected,
         InvalidArgument,
+        LookupFailed,
     };
 
     struct Node {
@@ -83,6 +99,11 @@ namespace chord::core {
 
         [[nodiscard]] virtual bool isRunning() const = 0;
 
+        virtual tl::expected<Node, Error> lookup(const std::string &remoteAddress, KeyId id,
+                                                 RequestConfig config) = 0;
+
+        CHORD_CORE_DEFINE_DEFAULT_ARG_2_PARAM(lookup, const std::string &, remoteAddress, KeyId, id);
+
         virtual tl::expected<FindSuccessorReply, Error>
         findSuccessor(const std::string &remoteAddress, KeyId id, RequestConfig config) = 0;
 
@@ -114,6 +135,8 @@ namespace chord::core {
 
         using GetSuccessorListCallback = std::function<std::vector<Node>()>;
 
+        using LookupCallback = std::function<tl::expected<Node, Error>(KeyId)>;
+
         using FindSuccessorCallback = std::function<FindSuccessorReply(KeyId)>;
         using GetPredecessorCallback = std::function<std::optional<Node>()>;
         using NotifyCallback = std::function<void(const Node &)>;
@@ -121,6 +144,8 @@ namespace chord::core {
         using PredecessorLeaveCallback = std::function<void(const Node &)>;
 
         virtual void setGetSuccessorListCallback(GetSuccessorListCallback callback) = 0;
+
+        virtual void setLookupCallback(LookupCallback callback) = 0;
 
         virtual void setFindSuccessorCallback(FindSuccessorCallback callback) = 0;
 

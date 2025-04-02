@@ -4,6 +4,7 @@ package chord_protos;
 
 service NodeService {
   rpc GetSuccessorList(GetSuccessorListRequest) returns (GetSuccessorListReply);
+  rpc Lookup(LookupRequest) returns (LookupReply);
 
   // This procedure is similar to find_predecessor in the Chord paper, but it directly returns the successor on the final step.
   rpc FindSuccessor(FindSuccessorRequest) returns (FindSuccessorReply);
@@ -31,6 +32,14 @@ message GetSuccessorListRequest {
 
 message GetSuccessorListReply {
   repeated NodeInfo nodes = 1;
+}
+
+message LookupRequest {
+  bytes keyId = 1;
+}
+
+message LookupReply {
+  NodeInfo node = 1;
 }
 
 message FindSuccessorRequest {
