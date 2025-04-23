@@ -15,6 +15,8 @@ namespace chord::core {
     constexpr size_t KEY_BITS = 160;
     constexpr size_t KEY_BYTES = KEY_BITS / 8;
 
+    static_assert(KEY_BYTES == 20, "KeyId size must be 20 bytes");
+
     using KeyId = std::array<uint8_t, KEY_BYTES>;
 
     std::strong_ordering compareKeyId(KeyId first, KeyId second);
@@ -28,8 +30,6 @@ namespace chord::core {
      * @return
      */
     bool keyIdBetween(KeyId start, KeyId end, KeyId betweenKey);
-
-    bool keyIdBefore(KeyId point, KeyId beforeKey);
 
     // Uses SHA-1 hash function to generate a KeyId from a string
     KeyId generateKeyId(const std::string &address);
@@ -77,6 +77,25 @@ namespace chord::core {
     auto func(type1 name1, type2 name2, type3 name3) { \
         return func(name1, name2, name3, {}); \
     }
+
+    class ChordCallbacks {
+    public:
+        virtual ~ChordCallbacks() = default;
+
+        virtual std::vector<Node> getSuccessorList() = 0;
+
+        virtual tl::expected<Node, Error> lookup(KeyId id) = 0;
+
+        virtual FindSuccessorReply findSuccessor(KeyId id) = 0;
+
+        virtual std::optional<Node> getPredecessor() = 0;
+
+        virtual void notify(const Node &node) = 0;
+
+        virtual void updateFingerTable(int index, const Node &node) = 0;
+
+        virtual void predecessorLeave(const Node &node) = 0;
+    };
 
 
     class ChordApplicationNetwork {
@@ -133,29 +152,7 @@ namespace chord::core {
         CHORD_CORE_DEFINE_DEFAULT_ARG_2_PARAM(predecessorLeave, const std::string &, remoteAddress,
                                               const Node &, predecessor);
 
-        using GetSuccessorListCallback = std::function<std::vector<Node>()>;
-
-        using LookupCallback = std::function<tl::expected<Node, Error>(KeyId)>;
-
-        using FindSuccessorCallback = std::function<FindSuccessorReply(KeyId)>;
-        using GetPredecessorCallback = std::function<std::optional<Node>()>;
-        using NotifyCallback = std::function<void(const Node &)>;
-        using UpdateFingerTableCallback = std::function<void(int, const Node &)>;
-        using PredecessorLeaveCallback = std::function<void(const Node &)>;
-
-        virtual void setGetSuccessorListCallback(GetSuccessorListCallback callback) = 0;
-
-        virtual void setLookupCallback(LookupCallback callback) = 0;
-
-        virtual void setFindSuccessorCallback(FindSuccessorCallback callback) = 0;
-
-        virtual void setGetPredecessorCallback(GetPredecessorCallback callback) = 0;
-
-        virtual void setNotifyCallback(NotifyCallback callback) = 0;
-
-        virtual void setUpdateFingerTableCallback(UpdateFingerTableCallback callback) = 0;
-
-        virtual void setPredecessorLeaveCallback(PredecessorLeaveCallback callback) = 0;
+        virtual void setCallbacks(std::shared_ptr<ChordCallbacks> callbacks) = 0;
     };
 
     std::shared_ptr<ChordNetwork> createFullNetwork();

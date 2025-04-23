@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "stdint.h"
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -14,6 +15,7 @@
 #include <mutex>
 #include <set>
 #include <thread>
+#include <bits/random.h>
 
 #include "network.hpp"
 
@@ -29,10 +31,12 @@ namespace chord::core {
         // uint64_t initialRetryInterval = 100; ///< Initial interval for retries in milliseconds
     };
 
+    class NodeServerCallbacksImpl;
+
     /**
     * @brief Represents a server for a Chord node.
     */
-    class NodeServer {
+    class NodeServer final {
     public:
         static tl::expected<std::unique_ptr<NodeServer>, Error> create(
             const std::string &address,
@@ -90,12 +94,26 @@ namespace chord::core {
             return network_;
         }
 
-        [[nodiscard]] ChordApplicationNetwork &getApplicationNetwork() {
+        [[nodiscard]] ChordApplicationNetwork &getApplicationNetwork() const {
             return *network_;
         }
 
     private:
         explicit NodeServer(std::string address, Config config, std::shared_ptr<ChordNetwork> network);
+
+        tl::expected<void, Error> initFingerTable(const Node &entryPoint);
+
+        std::vector<Node> getSuccessorList();
+
+        FindSuccessorReply findSuccessor(KeyId id);
+
+        std::optional<Node> getPredecessor();
+
+        void notify(const Node &node);
+
+        void updateFingerTable(int index, const Node &node);
+
+        void predecessorLeave(const Node &node);
 
         /**
          * NOTE: not thread safe
@@ -112,9 +130,18 @@ namespace chord::core {
             return Node{.id = id_, .address = address_};
         }
 
+        [[nodiscard]] KeyId getFingerTableID(size_t index) const;
+
         FindSuccessorReply findSuccessor(KeyId keyId) const;
 
         void stabilizationLoop(std::stop_token stopToken);
+
+        void updateSuccessorListAfterFailure();
+
+        // Called during non-failures (i.e. successor informed us of a new successor)
+        void addNewSuccessor(const Node &node);
+
+        void refreshFingerTable();
 
 
         /**
@@ -138,5 +165,12 @@ namespace chord::core {
         std::condition_variable cv_;
         bool shouldTerminate_ = false;
         std::optional<std::jthread> stabilizationThread_;
+
+        std::shared_ptr<NodeServerCallbacksImpl> callbacks_;
+
+        friend class NodeServerCallbacksImpl;
+
+        std::random_device rd_{};
+        std::mt19937 gen_;
     };
 } // namespace chord::core

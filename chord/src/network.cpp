@@ -1,3 +1,4 @@
+#include <cassert>
 #include <chrono>
 #include <cstring>
 #include <exception>
@@ -14,6 +15,7 @@
 #include "chord_protos/node.grpc.pb.h"
 #include "chord_protos/node.pb.h"
 #include <openssl/sha.h>
+#include <spdlog/spdlog.h>
 
 namespace chord::core {
     inline tl::expected<KeyId, Error> toId(const std::string &id) {
@@ -70,111 +72,18 @@ namespace chord::core {
     class GrpcChordNetwork final : public ChordNetwork {
         class ChordServiceImpl final : public chord_protos::NodeService::Service {
         public:
-            void setGetSuccessorListCallback(GetSuccessorListCallback callback) {
+            void setCallbacks(std::shared_ptr<ChordCallbacks> callbacks) {
                 std::lock_guard lock(mutex_);
-                getSuccessorListCallback_ = std::move(callback);
-            }
-
-            void setFindSuccessorCallback(FindSuccessorCallback callback) {
-                std::lock_guard lock(mutex_);
-                class ChordServiceImpl final : public chord_protos::NodeService::Service {
-                public:
-                    void setGetSuccessorListCallback(GetSuccessorListCallback callback) {
-                        std::lock_guard lock(serverMutex_);
-                        getSuccessorListCallback_ = std::move(callback);
-                    }
-
-                    void setFindSuccessorCallback(FindSuccessorCallback callback) {
-                        std::lock_guard lock(serverMutex_);
-                        findSuccessorCallback_ = std::move(callback);
-                    }
-
-                    void setGetPredecessorCallback(GetPredecessorCallback callback) {
-                        std::lock_guard lock(serverMutex_);
-                        getPredecessorCallback_ = std::move(callback);
-                    }
-
-                    void setNotifyCallback(NotifyCallback callback) {
-                        std::lock_guard lock(serverMutex_);
-                        notifyCallback_ = std::move(callback);
-                    }
-
-                    void setUpdateFingerTableCallback(UpdateFingerTableCallback callback) {
-                        std::lock_guard lock(serverMutex_);
-                        updateFingerTableCallback_ = std::move(callback);
-                    }
-
-                    void setPredecessorLeaveCallback(PredecessorLeaveCallback callback) {
-                        std::lock_guard lock(serverMutex_);
-                        predecessorLeaveCallback_ = std::move(callback);
-                    }
-
-                private:
-                    grpc::Status getSuccessorList(grpc::ServerContext *context,
-                                                  const chord_protos::GetSuccessorListRequest *
-                                                  request,
-                                                  chord_protos::GetSuccessorListReply *response);
-
-                    grpc::Status findSuccessor(grpc::ServerContext *context,
-                                               const chord_protos::FindSuccessorRequest *request,
-                                               chord_protos::FindSuccessorReply *response);
-
-                    grpc::Status getPredecessor(grpc::ServerContext *context,
-                                                const chord_protos::GetPredecessorRequest *request,
-                                                chord_protos::GetPredecessorReply *response);
-
-                    grpc::Status notify(grpc::ServerContext *context,
-                                        const chord_protos::NotifyRequest *request,
-                                        chord_protos::NotifyReply *response);
-
-                    grpc::Status updateFingerTable(grpc::ServerContext *context,
-                                                   const chord_protos::UpdateFingerTableRequest *
-                                                   request,
-                                                   chord_protos::UpdateFingerTableReply *response);
-
-                    grpc::Status predecessorLeave(grpc::ServerContext *context,
-                                                  const chord_protos::PredecessorLeaveRequest *
-                                                  request,
-                                                  chord_protos::PredecessorLeaveReply *response);
-
-
-                    std::mutex serverMutex_;
-
-                    GetSuccessorListCallback getSuccessorListCallback_;
-
-                    FindSuccessorCallback findSuccessorCallback_;
-                    GetPredecessorCallback getPredecessorCallback_;
-                    NotifyCallback notifyCallback_;
-                    UpdateFingerTableCallback updateFingerTableCallback_;
-                    PredecessorLeaveCallback predecessorLeaveCallback_;
-                };
-                findSuccessorCallback_ = std::move(callback);
-            }
-
-            void setGetPredecessorCallback(GetPredecessorCallback callback) {
-                std::lock_guard lock(mutex_);
-                getPredecessorCallback_ = std::move(callback);
-            }
-
-            void setNotifyCallback(NotifyCallback callback) {
-                std::lock_guard lock(mutex_);
-                notifyCallback_ = std::move(callback);
-            }
-
-            void setUpdateFingerTableCallback(UpdateFingerTableCallback callback) {
-                std::lock_guard lock(mutex_);
-                updateFingerTableCallback_ = std::move(callback);
-            }
-
-            void setPredecessorLeaveCallback(PredecessorLeaveCallback callback) {
-                std::lock_guard lock(mutex_);
-                predecessorLeaveCallback_ = std::move(callback);
+                callbacks_ = std::move(callbacks);
             }
 
         private:
             grpc::Status GetSuccessorList(grpc::ServerContext *context,
                                           const chord_protos::GetSuccessorListRequest *request,
                                           chord_protos::GetSuccessorListReply *response) override;
+
+            grpc::Status Lookup(grpc::ServerContext *context, const chord_protos::LookupRequest *request,
+                                chord_protos::LookupReply *response) override;
 
             grpc::Status FindSuccessor(grpc::ServerContext *context,
                                        const chord_protos::FindSuccessorRequest *request,
@@ -197,15 +106,9 @@ namespace chord::core {
                                           chord_protos::PredecessorLeaveReply *response) override;
 
 
-            std::mutex mutex_;
+            std::mutex mutex_{};
 
-            GetSuccessorListCallback getSuccessorListCallback_;
-
-            FindSuccessorCallback findSuccessorCallback_;
-            GetPredecessorCallback getPredecessorCallback_;
-            NotifyCallback notifyCallback_;
-            UpdateFingerTableCallback updateFingerTableCallback_;
-            PredecessorLeaveCallback predecessorLeaveCallback_;
+            std::shared_ptr<ChordCallbacks> callbacks_;
         };
 
     public:
@@ -222,6 +125,8 @@ namespace chord::core {
 
         tl::expected<std::vector<Node>, Error>
         getSuccessorList(const std::string &remoteAddress, RequestConfig config) override;
+
+        tl::expected<Node, Error> lookup(const std::string &remoteAddress, KeyId id, RequestConfig config) override;
 
         tl::expected<FindSuccessorReply, Error>
         findSuccessor(const std::string &remoteAddress, KeyId id, RequestConfig config) override;
@@ -240,28 +145,8 @@ namespace chord::core {
         tl::expected<void, Error> predecessorLeave(const std::string &remoteAddress,
                                                    const Node &predecessor, RequestConfig config) override;
 
-        void setGetSuccessorListCallback(GetSuccessorListCallback callback) override {
-            service_.setGetSuccessorListCallback(std::move(callback));
-        }
-
-        void setFindSuccessorCallback(FindSuccessorCallback callback) override {
-            service_.setFindSuccessorCallback(std::move(callback));
-        }
-
-        void setGetPredecessorCallback(GetPredecessorCallback callback) override {
-            service_.setGetPredecessorCallback(std::move(callback));
-        }
-
-        void setNotifyCallback(NotifyCallback callback) override {
-            service_.setNotifyCallback(std::move(callback));
-        }
-
-        void setUpdateFingerTableCallback(UpdateFingerTableCallback callback) override {
-            service_.setUpdateFingerTableCallback(std::move(callback));
-        }
-
-        void setPredecessorLeaveCallback(PredecessorLeaveCallback callback) override {
-            service_.setPredecessorLeaveCallback(std::move(callback));
+        void setCallbacks(std::shared_ptr<ChordCallbacks> callbacks) override {
+            service_.setCallbacks(std::move(callbacks));
         }
 
     private:
@@ -276,16 +161,21 @@ namespace chord::core {
         bool running_ = false;
     };
 
+#define CHECK_CALLBACKS() \
+    if (!callbacks_) { \
+        spdlog::error("Callbacks not set"); \
+        return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callbacks not set"); \
+    }
+
+
     grpc::Status GrpcChordNetwork::ChordServiceImpl::GetSuccessorList(grpc::ServerContext *context,
                                                                       const chord_protos::GetSuccessorListRequest *
                                                                       request,
                                                                       chord_protos::GetSuccessorListReply *response) {
-        if (!getSuccessorListCallback_) {
-            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
-        }
+        CHECK_CALLBACKS();
 
         try {
-            auto nodes = getSuccessorListCallback_();
+            auto nodes = callbacks_->getSuccessorList();
             for (const auto &node: nodes) {
                 auto *replyNode = response->add_nodes();
                 fromNode(node, replyNode);
@@ -297,12 +187,35 @@ namespace chord::core {
         }
     }
 
+    grpc::Status GrpcChordNetwork::ChordServiceImpl::Lookup(grpc::ServerContext *context,
+                                                            const chord_protos::LookupRequest *request,
+                                                            chord_protos::LookupReply *response) {
+        CHECK_CALLBACKS();
+
+        try {
+            auto id = toId(request->keyid());
+            if (!id) {
+                return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid ID");
+            }
+
+            auto node = callbacks_->lookup(*id);
+            if (!node) {
+                return grpc::Status(grpc::StatusCode::UNAVAILABLE, "Node not found");
+            }
+
+            fromNode(*node, response->mutable_node());
+
+            return grpc::Status::OK;
+        } catch (const std::exception &e) {
+            return {grpc::StatusCode::INTERNAL, e.what()};
+        }
+    }
+
+
     grpc::Status GrpcChordNetwork::ChordServiceImpl::FindSuccessor(grpc::ServerContext *context,
                                                                    const chord_protos::FindSuccessorRequest *request,
                                                                    chord_protos::FindSuccessorReply *response) {
-        if (!findSuccessorCallback_) {
-            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
-        }
+        CHECK_CALLBACKS();
 
         try {
             auto address = toId(request->keyid());
@@ -310,7 +223,7 @@ namespace chord::core {
                 return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid ID");
             }
 
-            auto node = findSuccessorCallback_(*address);
+            auto node = callbacks_->findSuccessor(*address);
             response->set_found(node.found);
             fromNode(node.node, response->mutable_node());
 
@@ -323,12 +236,10 @@ namespace chord::core {
     grpc::Status GrpcChordNetwork::ChordServiceImpl::GetPredecessor(grpc::ServerContext *context,
                                                                     const chord_protos::GetPredecessorRequest *request,
                                                                     chord_protos::GetPredecessorReply *response) {
-        if (!getPredecessorCallback_) {
-            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
-        }
+        CHECK_CALLBACKS();
 
         try {
-            if (auto node = getPredecessorCallback_()) {
+            if (auto node = callbacks_->getPredecessor()) {
                 fromNode(*node, response->mutable_node());
             }
 
@@ -342,9 +253,7 @@ namespace chord::core {
                                                             const chord_protos::NotifyRequest *
                                                             request,
                                                             chord_protos::NotifyReply *response) {
-        if (!notifyCallback_) {
-            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
-        }
+        CHECK_CALLBACKS();
 
         try {
             auto node = toNode(request->node());
@@ -352,7 +261,7 @@ namespace chord::core {
                 return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid node");
             }
 
-            notifyCallback_(*node);
+            callbacks_->notify(*node);
 
             return grpc::Status::OK;
         } catch (const std::exception &e) {
@@ -364,9 +273,7 @@ namespace chord::core {
                                                                        const chord_protos::UpdateFingerTableRequest *
                                                                        request,
                                                                        chord_protos::UpdateFingerTableReply *response) {
-        if (!updateFingerTableCallback_) {
-            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
-        }
+        CHECK_CALLBACKS();
 
         try {
             auto node = toNode(request->node());
@@ -374,7 +281,7 @@ namespace chord::core {
                 return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid node");
             }
 
-            updateFingerTableCallback_(request->index(), *node);
+            callbacks_->updateFingerTable(request->index(), *node);
 
             return grpc::Status::OK;
         } catch (const std::exception &e) {
@@ -386,9 +293,7 @@ namespace chord::core {
                                                                       const chord_protos::PredecessorLeaveRequest *
                                                                       request,
                                                                       chord_protos::PredecessorLeaveReply *response) {
-        if (!predecessorLeaveCallback_) {
-            return grpc::Status(grpc::StatusCode::UNIMPLEMENTED, "Callback not set");
-        }
+        CHECK_CALLBACKS();
 
         try {
             auto node = toNode(request->node());
@@ -396,7 +301,7 @@ namespace chord::core {
                 return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "Invalid node");
             }
 
-            predecessorLeaveCallback_(*node);
+            callbacks_->predecessorLeave(*node);
 
             return grpc::Status::OK;
         } catch (const std::exception &e) {
@@ -456,6 +361,24 @@ namespace chord::core {
             nodes.push_back(*node);
         }
         return nodes;
+    }
+
+    tl::expected<Node, Error> GrpcChordNetwork::
+    lookup(const std::string &remoteAddress, KeyId id, RequestConfig config) {
+        auto channel = createChannel(remoteAddress);
+        auto stub = chord_protos::NodeService::NewStub(channel);
+
+        chord_protos::LookupRequest request;
+        request.set_keyid(fromId(id));
+
+        chord_protos::LookupReply reply;
+        grpc::ClientContext context;
+        setClientContext(context, config);
+
+        auto status = stub->Lookup(&context, request, &reply);
+        RETURN_IF_STATUS_ERROR(status);
+
+        return toNode(reply.node());
     }
 
     tl::expected<FindSuccessorReply, Error> GrpcChordNetwork::findSuccessor(

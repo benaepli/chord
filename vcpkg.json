@@ -2,6 +2,7 @@
   "name": "chord",
   "version": "0.10",
   "dependencies": [
+    "boost-multiprecision",
     "grpc",
     "openssl",
     "spdlog",

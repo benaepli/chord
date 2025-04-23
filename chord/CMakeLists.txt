@@ -1,6 +1,7 @@
 find_package(OpenSSL REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(tl-expected CONFIG REQUIRED)
+find_package(boost_multiprecision REQUIRED CONFIG)
 
 add_subdirectory(proto)
 
@@ -11,7 +12,7 @@ add_library(chord
 )
 
 target_link_libraries(chord PUBLIC tl::expected)
-target_link_libraries(chord PRIVATE chord_protos OpenSSL::Crypto spdlog::spdlog)
+target_link_libraries(chord PRIVATE chord_protos OpenSSL::Crypto spdlog::spdlog Boost::multiprecision)
 
 # Set up include directories
 target_include_directories(chord
