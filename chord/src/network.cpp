@@ -503,7 +503,7 @@ namespace chord::core {
         }
 
         if (cmp > 0) {
-            return std::strong_ordering::less;
+            return std::strong_ordering::greater;
         }
 
         return std::strong_ordering::equal;

@@ -96,6 +96,23 @@ namespace chord::core {
 
     // Note that initFingerTable is not thread-safe
     tl::expected<void, Error> NodeServer::initFingerTable(const Node &entryPoint) {
+        // Ask entry point for successor
+        auto result = network_->lookup(entryPoint.address, id_);
+        if (!result) {
+            return tl::unexpected(result.error());
+        }
+        auto successor = *result;
+        auto successorList = network_->getSuccessorList(successor.address);
+        if (!successorList) {
+            return tl::unexpected(successorList.error());
+        }
+        successorList_[0] = successor;
+        for (size_t i = 1; i < std::min(config_.successorListSize, successorList->size()); ++i) {
+            successorList_.push_back((*successorList)[i]);
+        }
+        network_->notify(successor.address, thisNode()); // Failure probably not an issue
+
+
         auto thisId = keyIdToInt(id_);
         for (int i = 0; i < KEY_BITS; ++i) {
             auto fingerId = (thisId + (mp::uint256_t(1) << i)) % MODULUS;
@@ -113,9 +130,47 @@ namespace chord::core {
         return {};
     }
 
+    void NodeServer::updateFingerTable(int index, const Node &node) {
+        // std::lock_guard lock(mtx_);
+        //
+        // if (keyIdBetween(id_, fingerTable_[index].id, node.id)) {
+        //     fingerTable_[index] = node;
+        // if (predecessor_) {
+        //     network_->updateFingerTable(predecessor_->address, index, node); TODO: fix
+        // }
+        // }
+    }
+
+    void NodeServer::predecessorLeave(const Node &node) {
+        std::lock_guard lock(mtx_);
+        if (!predecessor_) {
+            spdlog::warn("No predecessor");
+            return;
+        }
+        if (node.id == predecessor_->id) {
+            predecessor_ = std::nullopt;
+            if (predecessorLeaveCallback_) {
+                predecessorLeaveCallback_(node);
+            }
+
+            auto predecessorResult = network_->getPredecessor(node.address);
+            if (!predecessorResult) {
+                spdlog::warn("Failed to get predecessor");
+                return;
+            }
+            auto predecessor = *predecessorResult;
+            if (predecessor) {
+                predecessor_ = *predecessor;
+                network_->notify(predecessor_->address, thisNode());
+            } else {
+                predecessor_ = std::nullopt;
+            }
+        }
+    }
+
     Node NodeServer::closestPrecedingFinger(KeyId keyId, std::optional<KeyId> ignoreId) const {
         // TODO: replace with binary search if not efficient enough
-        for (auto it = successorList_.rbegin(); it != successorList_.rend(); ++it) {
+        for (auto it = fingerTable_.rbegin(); it != fingerTable_.rend(); ++it) {
             KeyId id = it->id;
             if (keyIdBetween(id_, keyId, id) && (!ignoreId || id != ignoreId)) {
                 return *it;
@@ -178,16 +233,19 @@ namespace chord::core {
 
         std::unique_lock lock(mtx_);
 
-        // TODO: handle network joins
+
         if (!entryPoint) {
             fingerTable_ = std::vector<Node>(KEY_BITS, thisNode());
-
-            return {};
+            successorList_.clear();
+            for (size_t i = 0; i < config_.successorListSize; ++i) {
+                successorList_.push_back(thisNode()); // Populate with self
+            }
         } {
             auto result = initFingerTable(*entryPoint);
             if (!result) {
                 return tl::unexpected(result.error());
             }
+            updateOthers();
         }
 
         auto result = network_->startServer(address_);
@@ -198,10 +256,22 @@ namespace chord::core {
         stabilizationThread_ = std::jthread([this](std::stop_token stopToken) {
             stabilizationLoop(std::move(stopToken));
         });
+
+        return {};
     }
 
-    tl::expected<void, Error> NodeServer::leave() {
-        // TODO: handle leaving the network before core shutdown
+    tl::expected<void, Error> NodeServer::leave() { {
+            std::lock_guard lock(mtx_);
+            if (successorList_.empty()) {
+                return tl::unexpected(Error::Unexpected);
+            }
+            auto successor = successorList_.front();
+            auto result = network_->predecessorLeave(successor.address, thisNode());
+            if (!result) {
+                return tl::unexpected(result.error());
+            }
+        }
+
         handleCoreShutdown();
         return {};
     }
@@ -311,6 +381,7 @@ namespace chord::core {
             if (!result) {
                 continue;
             }
+            auto &successorList = *result;
 
             lock.lock();
             if (!successorList_.empty() && successorList_.front() != firstSuccessor) {
@@ -318,8 +389,27 @@ namespace chord::core {
                 return;
             }
 
+            for (size_t i = 1; i < std::min(config_.successorListSize, successorList.size()); ++i) {
+                successorList_.push_back(successorList[i]);
+            }
 
+            successorListChangeCallback_(successorList_);
         }
+    }
+
+    void NodeServer::updateOthers() {
+        // for (size_t i = 0; i < fingerTable_.size(); ++i) {
+        //     auto fingerId = getFingerTableID(i);
+        //     auto node = network_->lookup(fingerTable_[i].address, fingerId);
+        //     if (!node) {
+        //         spdlog::warn("Failed to update others");
+        //         continue;
+        //     }
+        //     auto &nodeToUpdate = *node;
+        //     network_->updateFingerTable(nodeToUpdate.address, i, thisNode());
+        // }
+
+        // TODO: fix
     }
 
     void NodeServer::addNewSuccessor(const Node &node) {

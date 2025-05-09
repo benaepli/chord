@@ -138,6 +138,8 @@ namespace chord::core {
 
         void updateSuccessorListAfterFailure();
 
+        void updateOthers();
+
         // Called during non-failures (i.e. successor informed us of a new successor)
         void addNewSuccessor(const Node &node);
 

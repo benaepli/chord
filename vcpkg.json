@@ -4,6 +4,7 @@
   "dependencies": [
     "boost-multiprecision",
     "grpc",
+    "gtest",
     "openssl",
     "spdlog",
     "tl-expected"
